@@ -1,10 +1,4 @@
 
-# Deploy Azure Function App (Python) com build no servidor (Oryx)
-# - Não faz build/zip local
-# - Envia o código puro (package: .)
-# - O Azure detecta Python e instala requirements.txt automaticamente
-# - Usa OIDC com identidade gerenciada de usuário criada no Centro de Implantação
-
 name: Deploy Azure Function App - func-m365-lock-unlock
 
 on:
@@ -13,7 +7,6 @@ on:
       - main
   workflow_dispatch:
 
-# Evita deploys concorrentes na mesma branch
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -22,21 +15,36 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write   # necessário para OIDC (login sem secret)
-      contents: read    # necessário para checkout do código
+      id-token: write
+      contents: read
 
     steps:
-      - name: Checkout do repositório
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Login no Azure (OIDC)
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Instala as dependências no formato que o Azure Functions (Python) espera
+      - name: Install dependencies into .python_packages
+        run: |
+          set -e
+          rm -rf .python_packages
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt --target ".python_packages/lib/site-packages"
+          # Listagem rápida dos pacotes para conferência
+          python -c "import pkgutil; print([m.name for m in pkgutil.iter_modules(['.python_packages/lib/site-packages'])][:20])"
+
+      - name: Login to Azure (OIDC)
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_EFBF9F796E8548878247CFBCA2D80772 }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_02D07947117C4412A3D57B77C864ED18 }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_BEBCCAD3DCEE49FA807632516A98A1C8 }}
 
-      - name: Deploy para Azure Functions (build no servidor com Oryx)
+      - name: Deploy to Azure Functions
         uses: azure/functions-action@v1
         with:
           app-name: func-m365-lock-unlock
