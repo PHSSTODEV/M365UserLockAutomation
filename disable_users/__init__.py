@@ -34,21 +34,25 @@ def get_token(tenant_id: str, client_id: str, client_secret: str) -> str:
         raise RuntimeError("Resposta de token sem access_token")
     return token
 
+
 def iter_group_members(headers: dict, group_id: str):
-    # seleciona apenas campos úteis; paginação via @odata.nextLink
-    url = f"{GRAPH_BASE}/groups/{group_id}/members?$select=id,userPrincipalName,@odata.type"
+    # Sem @odata.type no $select (não permitido pela API)
+    url = f"{GRAPH_BASE}/groups/{group_id}/members?$select=id,userPrincipalName"
     while url:
         resp = requests.get(url, headers=headers, timeout=30)
         logging.info(f"[members] GET status={resp.status_code}")
         if resp.status_code != 200:
             logging.error(f"[members] body={resp.text}")
             raise RuntimeError("Falha ao listar membros do grupo")
+
         data = resp.json()
         for obj in data.get("value", []):
-            # age apenas em usuários
+            # Filtrar somente usuários
             if obj.get("@odata.type") == "#microsoft.graph.user":
                 yield obj
+
         url = data.get("@odata.nextLink")
+
 
 def set_account_enabled(headers: dict, user_id: str, enabled: bool) -> int:
     url = f"{GRAPH_BASE}/users/{user_id}"
