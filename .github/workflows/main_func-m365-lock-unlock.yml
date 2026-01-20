@@ -22,20 +22,28 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Setup Python version
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      # Instala as dependências no formato que o Azure Functions (Python) espera
       - name: Install dependencies into .python_packages
         run: |
-          set -e
-          rm -rf .python_packages
           python -m pip install --upgrade pip
+          rm -rf .python_packages
           python -m pip install -r requirements.txt --target ".python_packages/lib/site-packages"
-          # Listagem rápida dos pacotes para conferência
-          python -c "import pkgutil; print([m.name for m in pkgutil.iter_modules(['.python_packages/lib/site-packages'])][:20])"
+          echo "==== Pacotes instalados ===="
+          ls .python_packages/lib/site-packages | head -n 20
+
+      - name: Create deployment ZIP
+        run: |
+          rm -f deployment.zip
+          zip -r deployment.zip . \
+            -x "venv/*" \
+            -x ".git/*" \
+            -x ".github/*" \
+            -x "__pycache__/*" \
+            -x "*.pyc"
 
       - name: Login to Azure (OIDC)
         uses: azure/login@v2
@@ -44,9 +52,8 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_02D07947117C4412A3D57B77C864ED18 }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_BEBCCAD3DCEE49FA807632516A98A1C8 }}
 
-      - name: Deploy to Azure Functions
+      - name: Deploy to Azure Functions using ZIP
         uses: azure/functions-action@v1
         with:
           app-name: func-m365-lock-unlock
-          slot-name: Production
-          package: .
+          package: deployment.zip
